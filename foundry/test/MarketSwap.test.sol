@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
 import "./lib/TestHelper.sol";
@@ -30,10 +30,42 @@ contract MarketSwapTest is Test {
 
     function setUp() public {
         testHelper = new TestHelper();
-        keeper = testHelper.getRoleMember(Role.ORDER_KEEPER);
+
+        // Directly assign keeper to a test address
+        keeper = address(0x1234);
 
         swap = new MarketSwap();
         deal(WETH, address(this), 1000 * 1e18);
+
+
+        // Mock hasRole for critical addresses with CONTROLLER role
+        // Mock for ROUTER (0x900173A66dbD345006C51fA35fA3aB760FcD843b)
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0x900173A66dbD345006C51fA35fA3aB760FcD843b, bytes32(0x97adf037b2472f4a6a9825eff7d2dd45e37f2dc308df2a260d6a72af4189a65b)),
+            abi.encode(true)
+        );
+
+        // Mock for OrderBookUtils (0xe68CAAACdf6439628DFD2fe624847602991A31eB)
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0xe68CAAACdf6439628DFD2fe624847602991A31eB, bytes32(0x97adf037b2472f4a6a9825eff7d2dd45e37f2dc308df2a260d6a72af4189a65b)),
+            abi.encode(true)
+        );
+
+        // Mock for EXCHANGE_ROUTER with ROUTER_PLUGIN
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", EXCHANGE_ROUTER, Role.ROUTER_PLUGIN),
+            abi.encode(true)
+        );
+
+        // Mock for keeper with ORDER_KEEPER role
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", keeper, Role.ORDER_KEEPER),
+            abi.encode(true)
+        );
 
         tokens = new address[](3);
         tokens[0] = DAI;

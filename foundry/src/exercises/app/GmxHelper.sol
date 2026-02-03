@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 import {console} from "forge-std/Test.sol";
 import {IERC20} from "../../interfaces/IERC20.sol";
@@ -171,15 +171,27 @@ abstract contract GmxHelper {
         // True for market increase
         bool isIncrease
     ) internal view returns (uint256 sizeDeltaUsd) {
-        // Calculate sizeDeltaUsd so that new position's leverage is close to 1
+            // Calculate sizeDeltaUsd so that new position's leverage is close to 1
         if (isIncrease) {
             // new position size = long token price * new collateral amount
             // new collateral amount = position.collateralAmount + longTokenAmount
             // sizeDeltaUsd = new position size - position.sizeInUsd
+            uint256 newCollateralAmount = collateralAmount + longTokenAmount;
+            uint256 newPositionSizeInUsd = newCollateralAmount * longTokenPrice
+                * 10 ** (30 - longTokenDecimals - CHAINLINK_DECIMALS);
+            if (newPositionSizeInUsd > sizeInUsd) {
+                sizeDeltaUsd = newPositionSizeInUsd - sizeInUsd;
+            }
         } else {
             // new position size = long token price * new collateral amount
             // new collateral amount = position.collateralAmount - longTokenAmount
             // sizeDeltaUsd = new position size - position.sizeInUsd
+            uint256 newCollateralAmount = collateralAmount - longTokenAmount;
+            uint256 newPositionSizeInUsd = newCollateralAmount * longTokenPrice
+                * 10 ** (30 - longTokenDecimals - CHAINLINK_DECIMALS);
+            if (sizeInUsd > newPositionSizeInUsd) {
+                sizeDeltaUsd = sizeInUsd - newPositionSizeInUsd;
+            }
         }
     }
 
@@ -190,13 +202,67 @@ abstract contract GmxHelper {
         // Long token amount to add to the current position
         uint256 longTokenAmount
     ) internal returns (bytes32 orderKey) {
-        uint256 longTokenPrice = oracle.getPrice(chainlinkLongToken);
+         uint256 longTokenPrice = oracle.getPrice(chainlinkLongToken);
         bytes32 positionKey = getPositionKey();
         Position.Props memory position = getPosition(positionKey);
 
         // Task 2.1 - Calculate position size delta
+        uint256 sizeDeltaUsd = getSizeDeltaUsd({
+            longTokenPrice: longTokenPrice,
+            sizeInUsd: position.numbers.sizeInUsd,
+            collateralAmount: position.numbers.collateralAmount,
+            longTokenAmount: longTokenAmount,
+            isIncrease: true
+        });
 
         // Task 2.2 - Create market increase order
+
+        // 90% of current long price
+        uint256 acceptablePrice =
+            longTokenPrice * 1e12 / CHAINLINK_MULTIPLIER * 90 / 100;
+
+        exchangeRouter.sendWnt{value: executionFee}({
+            receiver: ORDER_VAULT,
+            amount: executionFee
+        });
+
+        longToken.approve(ROUTER, longTokenAmount);
+        exchangeRouter.sendTokens({
+            token: address(longToken),
+            receiver: ORDER_VAULT,
+            amount: longTokenAmount
+        });
+
+        return exchangeRouter.createOrder(
+            IBaseOrderUtils.CreateOrderParams({
+                addresses: IBaseOrderUtils.CreateOrderParamsAddresses({
+                    receiver: address(this),
+                    cancellationReceiver: address(0),
+                    callbackContract: address(0),
+                    uiFeeReceiver: address(0),
+                    market: address(marketToken),
+                    initialCollateralToken: address(longToken),
+                    swapPath: new address[](0)
+                }),
+                numbers: IBaseOrderUtils.CreateOrderParamsNumbers({
+                    sizeDeltaUsd: sizeDeltaUsd,
+                    // Set by amount of collateral sent to ORDER_VAULT
+                    initialCollateralDeltaAmount: 0,
+                    triggerPrice: 0,
+                    acceptablePrice: acceptablePrice,
+                    executionFee: executionFee,
+                    callbackGasLimit: 0,
+                    minOutputAmount: 0,
+                    validFromTime: 0
+                }),
+                orderType: Order.OrderType.MarketIncrease,
+                decreasePositionSwapType: Order.DecreasePositionSwapType.NoSwap,
+                isLong: false,
+                shouldUnwrapNativeToken: false,
+                autoCancel: false,
+                referralCode: bytes32(uint256(0))
+            })
+        );
     }
 
     // Task 3: Create market decrease order
@@ -223,15 +289,79 @@ abstract contract GmxHelper {
         require(longTokenAmount > 0, "long token amount = 0");
 
         // Task 3.1 - Calculate position size delta
+        uint256 sizeDeltaUsd = getSizeDeltaUsd({
+            longTokenPrice: longTokenPrice,
+            sizeInUsd: position.numbers.sizeInUsd,
+            collateralAmount: position.numbers.collateralAmount,
+            longTokenAmount: longTokenAmount,
+            isIncrease: false
+        });
+
+        // Withdrawing collateral should also decrease position size
+        require(sizeDeltaUsd > 0, "size delta = 0");
 
         // Task 3.2 - Send market decrease order
 
+        // 110% of current price
+        uint256 acceptablePrice =
+            longTokenPrice * 1e12 / CHAINLINK_MULTIPLIER * 110 / 100;
+
+        exchangeRouter.sendWnt{value: executionFee}({
+            receiver: ORDER_VAULT,
+            amount: executionFee
+        });
+
         // Decreasing position that results in small position size causes liquidation error
+        return exchangeRouter.createOrder(
+            IBaseOrderUtils.CreateOrderParams({
+                addresses: IBaseOrderUtils.CreateOrderParamsAddresses({
+                    receiver: receiver,
+                    cancellationReceiver: address(0),
+                    callbackContract: callbackContract,
+                    uiFeeReceiver: address(0),
+                    market: address(marketToken),
+                    initialCollateralToken: address(longToken),
+                    swapPath: new address[](0)
+                }),
+                numbers: IBaseOrderUtils.CreateOrderParamsNumbers({
+                    sizeDeltaUsd: sizeDeltaUsd,
+                    initialCollateralDeltaAmount: longTokenAmount,
+                    triggerPrice: 0,
+                    acceptablePrice: acceptablePrice,
+                    executionFee: executionFee,
+                    callbackGasLimit: callbackGasLimit,
+                    minOutputAmount: 0,
+                    validFromTime: 0
+                }),
+                orderType: Order.OrderType.MarketDecrease,
+                decreasePositionSwapType: Order
+                    .DecreasePositionSwapType
+                    .SwapPnlTokenToCollateralToken,
+                isLong: false,
+                shouldUnwrapNativeToken: false,
+                autoCancel: false,
+                referralCode: bytes32(uint256(0))
+            })
+        );
     }
 
     // Task 4: Cancel order
-    function cancelOrder(bytes32 orderKey) internal {}
+    function cancelOrder(bytes32 orderKey) internal {
+       exchangeRouter.cancelOrder(orderKey);
+    }
 
     // Task 5: Claim funding fees
-    function claimFundingFees() internal {}
+    function claimFundingFees() internal {
+        address[] memory markets = new address[](1);
+        markets[0] = address(marketToken);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(longToken);
+
+        exchangeRouter.claimFundingFees({
+            markets: markets,
+            tokens: tokens,
+            receiver: address(this)
+        });
+    }
 }

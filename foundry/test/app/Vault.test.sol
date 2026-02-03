@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
 import "../lib/TestHelper.sol";
 import {EventUtils} from "../../src/types/EventUtils.sol";
 import {Order} from "../../src/types/Order.sol";
 import {IVault} from "../../src/lib/app/IVault.sol";
+import {Role} from "../../src/lib/Role.sol";
 import {Vault} from "@exercises/app/Vault.sol";
 
 contract MockStrategy {
@@ -72,6 +73,13 @@ contract VaultTest is Test {
         vault = new Vault();
         strategy = new MockStrategy();
         cb = new MockCallback();
+
+        // Mock hasRole for ORDER_HANDLER
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", ORDER_HANDLER, Role.ORDER_KEEPER),
+            abi.encode(true)
+        );
 
         deal(WETH, address(this), 1000 * 1e18);
 

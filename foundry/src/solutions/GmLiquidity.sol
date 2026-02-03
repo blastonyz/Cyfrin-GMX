@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 import {console} from "forge-std/Test.sol";
 import {IERC20} from "../interfaces/IERC20.sol";
@@ -78,10 +78,10 @@ contract GmLiquidity {
         usdc.transferFrom(msg.sender, address(this), usdcAmount);
 
         // Task 3.1 - Send execution fee to the deposit vault
-        exchangeRouter.sendWnt{value: executionFee}({
-            receiver: DEPOSIT_VAULT,
-            amount: executionFee
-        });
+            exchangeRouter.sendWnt{value: executionFee}({
+                receiver: DEPOSIT_VAULT,
+                amount: executionFee
+            });
 
         // Task 3.2 - Send USDC to the deposit vault
         usdc.approve(ROUTER, usdcAmount);

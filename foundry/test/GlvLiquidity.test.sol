@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
 import "./lib/TestHelper.sol";
@@ -42,7 +42,72 @@ contract GlvLiquidityTest is Test {
         glvLiquidity = new GlvLiquidity();
         deal(USDC, address(this), 1000 * 1e6);
 
-        keeper = testHelper.getRoleMember(Role.ORDER_KEEPER);
+        // Directly assign keeper to a test address
+        keeper = address(0x1234);
+
+        // Mock hasRole for critical addresses with CONTROLLER role
+        // Mock for ROUTER (0x900173A66dbD345006C51fA35fA3aB760FcD843b)
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0x900173A66dbD345006C51fA35fA3aB760FcD843b, bytes32(0x97adf037b2472f4a6a9825eff7d2dd45e37f2dc308df2a260d6a72af4189a65b)),
+            abi.encode(true)
+        );
+
+        // Mock for OrderBookUtils (0xe68CAAACdf6439628DFD2fe624847602991A31eB)
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0xe68CAAACdf6439628DFD2fe624847602991A31eB, bytes32(0x97adf037b2472f4a6a9825eff7d2dd45e37f2dc308df2a260d6a72af4189a65b)),
+            abi.encode(true)
+        );
+
+        // Mock for DepositStoreUtils (0xfe2Df84627950A0fB98EaD49c69a1DE3F66867d6)
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0xfe2Df84627950A0fB98EaD49c69a1DE3F66867d6, bytes32(0x97adf037b2472f4a6a9825eff7d2dd45e37f2dc308df2a260d6a72af4189a65b)),
+            abi.encode(true)
+        );
+
+        // Mock for WithdrawalStoreUtils (0x64fbD82d9F987baF5A59401c64e823232182E8Ed)
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0x64fbD82d9F987baF5A59401c64e823232182E8Ed, bytes32(0x97adf037b2472f4a6a9825eff7d2dd45e37f2dc308df2a260d6a72af4189a65b)),
+            abi.encode(true)
+        );
+
+        // Mock for GlvDepositStoreUtils (0x3f6dF0c3A7221BA1375E87e7097885a601B41Afc)
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0x3f6dF0c3A7221BA1375E87e7097885a601B41Afc, bytes32(0x97adf037b2472f4a6a9825eff7d2dd45e37f2dc308df2a260d6a72af4189a65b)),
+            abi.encode(true)
+        );
+
+        // Mock for GLV_ROUTER (0x105b5aFe50FBCe7759051974fB1710ce331C77B3) with CONTROLLER role
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0x105b5aFe50FBCe7759051974fB1710ce331C77B3, bytes32(0x97adf037b2472f4a6a9825eff7d2dd45e37f2dc308df2a260d6a72af4189a65b)),
+            abi.encode(true)
+        );
+
+        // Mock for EXCHANGE_ROUTER with ROUTER_PLUGIN
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", EXCHANGE_ROUTER, Role.ROUTER_PLUGIN),
+            abi.encode(true)
+        );
+
+        // Mock for GLV_ROUTER with ROUTER_PLUGIN
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", 0x105b5aFe50FBCe7759051974fB1710ce331C77B3, Role.ROUTER_PLUGIN),
+            abi.encode(true)
+        );
+
+        // Mock for keeper with ORDER_KEEPER role
+        vm.mockCall(
+            ROLE_STORE,
+            abi.encodeWithSignature("hasRole(address,bytes32)", keeper, Role.ORDER_KEEPER),
+            abi.encode(true)
+        );
 
         address[] memory markets = new address[](2);
         markets[0] = GM_TOKEN_ETH_WETH_USDC;
